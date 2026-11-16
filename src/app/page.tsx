@@ -1,519 +1,125 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-type Table = {
-  id: number;
-  status: string;
-  waiter: string;
-  cls: string;
-};
+type Order = { id: string; table: string; customer: string; items: string; total: number; status: 'New' | 'Preparing' | 'Ready' | 'Served'; type: 'Dine-in' | 'Takeaway' | 'Delivery'; time: string };
+type TableItem = { id: string; seats: number; status: 'Available' | 'Occupied' | 'Reserved' | 'Cleaning'; area: string };
+type MenuItem = { name: string; category: string; price: number; available: boolean };
+type Reservation = { name: string; time: string; guests: number; status: string };
 
-const tables: Table[] = [
-  { id: 1, status: 'Available', waiter: '—', cls: 'green' },
-  { id: 2, status: 'Occupied', waiter: 'Rahul', cls: 'red' },
-  { id: 3, status: 'Preparing', waiter: 'Amit', cls: 'yellow' },
-  { id: 4, status: 'Food Ready', waiter: 'Priya', cls: 'blue' },
-  { id: 5, status: 'Delayed', waiter: 'Rahul', cls: 'red' },
-  { id: 6, status: 'Bill Requested', waiter: 'Amit', cls: 'purple' },
-  { id: 7, status: 'Cleaning', waiter: '—', cls: 'yellow' },
-  { id: 8, status: 'Available', waiter: '—', cls: 'green' },
+const initialOrders: Order[] = [
+  { id: 'SF-1048', table: 'T04', customer: 'Aarav Shah', items: '2× Masala Dosa, 1× Filter Coffee', total: 390, status: 'Preparing', type: 'Dine-in', time: '7 min ago' },
+  { id: 'SF-1047', table: 'T08', customer: 'Mira Patel', items: '1× Farmhouse Pizza, 2× Cold Coffee', total: 680, status: 'Ready', type: 'Dine-in', time: '12 min ago' },
+  { id: 'SF-1046', table: 'Pickup', customer: 'Dev Mehta', items: '1× Paneer Wrap, 1× Iced Latte', total: 310, status: 'New', type: 'Takeaway', time: '2 min ago' },
+  { id: 'SF-1045', table: 'Delivery', customer: 'Riya Joshi', items: '2× Veg Burger, 1× Fries', total: 450, status: 'Served', type: 'Delivery', time: '21 min ago' },
+];
+const initialTables: TableItem[] = [
+  { id: 'T01', seats: 2, status: 'Available', area: 'Indoor' }, { id: 'T02', seats: 2, status: 'Occupied', area: 'Indoor' },
+  { id: 'T03', seats: 4, status: 'Occupied', area: 'Indoor' }, { id: 'T04', seats: 4, status: 'Occupied', area: 'Indoor' },
+  { id: 'T05', seats: 6, status: 'Reserved', area: 'Window' }, { id: 'T06', seats: 2, status: 'Available', area: 'Window' },
+  { id: 'T07', seats: 4, status: 'Cleaning', area: 'Patio' }, { id: 'T08', seats: 4, status: 'Occupied', area: 'Patio' },
+  { id: 'T09', seats: 6, status: 'Available', area: 'Patio' }, { id: 'T10', seats: 2, status: 'Available', area: 'Indoor' },
+  { id: 'T11', seats: 4, status: 'Occupied', area: 'Indoor' }, { id: 'T12', seats: 2, status: 'Available', area: 'Window' },
+];
+const initialMenu: MenuItem[] = [
+  { name: 'Classic Masala Dosa', category: 'Breakfast', price: 150, available: true },
+  { name: 'Paneer Tikka Pizza', category: 'Pizza', price: 340, available: true },
+  { name: 'Farmhouse Pizza', category: 'Pizza', price: 390, available: true },
+  { name: 'Paneer Club Sandwich', category: 'Snacks', price: 220, available: true },
+  { name: 'Crispy Veg Burger', category: 'Snacks', price: 180, available: true },
+  { name: 'Cold Coffee', category: 'Coffee & Drinks', price: 140, available: true },
+  { name: 'Classic Iced Latte', category: 'Coffee & Drinks', price: 170, available: true },
+  { name: 'Masala Chai', category: 'Coffee & Drinks', price: 50, available: false },
+  { name: 'Chocolate Brownie', category: 'Desserts', price: 130, available: true },
+];
+const initialReservations: Reservation[] = [
+  { name: 'Anaya Desai', time: '7:30 PM', guests: 4, status: 'Confirmed' },
+  { name: 'Kabir Shah', time: '8:00 PM', guests: 2, status: 'Confirmed' },
+  { name: 'Ishita Patel', time: '8:15 PM', guests: 6, status: 'Pending' },
 ];
 
+const navGroups = [
+  { label: 'WORKSPACE', items: [['overview', '◫', 'Overview'], ['orders', '▤', 'Orders'], ['tables', '▦', 'Tables & floor'], ['kitchen', '♨', 'Kitchen display'], ['reservations', '▣', 'Reservations']] },
+  { label: 'MANAGEMENT', items: [['menu', '☷', 'Menu & catalog'], ['inventory', '▧', 'Inventory'], ['customers', '♙', 'Customers & CRM'], ['staff', '♧', 'Staff & shifts'], ['delivery', '⌁', 'Delivery & takeaway']] },
+  { label: 'INSIGHTS', items: [['analytics', '⌁', 'Analytics'], ['marketing', '✧', 'Marketing'], ['settings', '⚙', 'Settings']] },
+];
+
+function money(n: number) { return '₹' + n.toLocaleString('en-IN'); }
+function Pill({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: string }) { return <span className={'pill ' + tone}>{children}</span>; }
+function SectionHead({ title, sub, action }: { title: string; sub?: string; action?: React.ReactNode }) { return <div className="section-head"><div><h2>{title}</h2>{sub && <p>{sub}</p>}</div>{action}</div>; }
+function Stat({ label, value, change, icon }: { label: string; value: string; change: string; icon: string }) { return <div className="stat-card"><div className="stat-top"><span>{label}</span><span className="stat-icon">{icon}</span></div><strong>{value}</strong><small className="positive">{change}</small></div>; }
+
 export default function Home() {
-  const [view, setView] = useState('owner');
-  const [selected, setSelected] = useState<Table | null>(null);
-  const [message, setMessage] = useState(
-    'Welcome! What would you like to eat today?'
-  );
-  const [request, setRequest] = useState('');
+  const [active, setActive] = useState('overview');
+  const [orders, setOrders] = useState(initialOrders);
+  const [tables, setTables] = useState(initialTables);
+  const [menu, setMenu] = useState(initialMenu);
+  const [reservations, setReservations] = useState(initialReservations);
+  const [query, setQuery] = useState('');
+  const [toast, setToast] = useState('');
+  const [modal, setModal] = useState('');
+  const [demo, setDemo] = useState(true);
+  const [restaurant, setRestaurant] = useState('The Daily Table');
+  const [newItem, setNewItem] = useState({ name: '', category: 'Snacks', price: '180' });
+  const [newReservation, setNewReservation] = useState({ name: '', time: '8:30 PM', guests: '2' });
+  const [filter, setFilter] = useState('All');
 
-  const nav = ['owner', 'manager', 'waiter', 'kitchen', 'customer'];
+  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(''), 2600); };
+  const updateOrder = (id: string, status: Order['status']) => { setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o)); notify(id + ' moved to ' + status); };
+  const addOrder = () => { const id = 'SF-' + (1049 + orders.length - initialOrders.length); setOrders(prev => [{ id, table: 'T01', customer: 'Walk-in guest', items: '1× Classic Masala Dosa, 1× Masala Chai', total: 200, status: 'New', type: 'Dine-in', time: 'Just now' }, ...prev]); setModal(''); setActive('orders'); notify('New demo order created'); };
+  const filteredOrders = useMemo(() => orders.filter(o => (filter === 'All' || o.status === filter) && (o.id + o.customer + o.items + o.table).toLowerCase().includes(query.toLowerCase())), [orders, filter, query]);
 
-  const go = (newView: string) => {
-    setView(newView);
-    setSelected(null);
-  };
+  const pageTitle = navGroups.flatMap(g => g.items).find(i => i[0] === active)?.[2] || 'Overview';
 
-  const content = () => {
-    if (view === 'owner') return <Owner onTable={setSelected} />;
-    if (view === 'manager') return <Manager />;
-    if (view === 'waiter') return <Waiter />;
-    if (view === 'kitchen') return <Kitchen />;
+  return <div className="shell">
+    <aside className="sidebar">
+      <div className="brand"><div className="brand-mark">S<span>✦</span></div><div><b>serveflow<span> ai</span></b><small>HOSPITALITY OS</small></div></div>
+      <div className="workspace-switch"><div className="restaurant-avatar">DT</div><div><b>{restaurant}</b><small>Restaurant workspace</small></div><span className="chevron">⌄</span></div>
+      <div className="side-scroll">{navGroups.map(group => <div className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{group.items.map(item => <button key={item[0]} className={'nav-link ' + (active === item[0] ? 'selected' : '')} onClick={() => { setActive(item[0]); setQuery(''); }}><span className="nav-icon">{item[1]}</span>{item[2]}{item[0] === 'orders' && <em>{orders.filter(o => o.status === 'New').length}</em>}</button>)}</div>)}</div>
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-icon">✧</div><b>Need a hand?</b><p>Explore the ServeFlow demo workspace and workflows.</p><button onClick={() => notify('Help center is available in the full product.')}>Visit help center ↗</button></div><div className="profile"><div className="profile-avatar">SV</div><div><b>Store Owner</b><small>Demo administrator</small></div><span>•••</span></div></div>
+    </aside>
 
-    return (
-      <Customer
-        message={message}
-        setMessage={setMessage}
-        request={request}
-        setRequest={setRequest}
-      />
-    );
-  };
+    <main className="main-area">
+      <header className="topbar"><div className="breadcrumb">Workspace <span>/</span> <b>{pageTitle}</b></div><div className="top-actions"><div className="demo-label"><span></span> DEMO MODE</div><button className="icon-btn" onClick={() => notify('You are all caught up!')} aria-label="Notifications">♧<i></i></button><button className="user-chip" onClick={() => setActive('settings')}><span className="profile-avatar">SV</span><span>Owner</span><span>⌄</span></button></div></header>
+      <div className="content">
+        <div className="page-intro"><div><div className="eyebrow">MONDAY, 16 NOVEMBER 2026 <span>•</span> LIVE DEMO DATA</div><h1>{active === 'overview' ? 'Good evening, Swayam' : pageTitle}<span className="wave">{active === 'overview' ? ' ✦' : ''}</span></h1><p>{active === 'overview' ? 'Here’s what’s happening across your restaurant today.' : pageDescriptions[active]}</p></div><div className="intro-actions"><button className="btn btn-quiet" onClick={() => notify('Report prepared in demo mode.')}>↧ Export report</button><button className="btn btn-primary" onClick={() => active === 'menu' ? setModal('menu') : active === 'reservations' ? setModal('reservation') : setModal('order')}>＋ {active === 'menu' ? 'Add menu item' : active === 'reservations' ? 'New reservation' : 'Create order'}</button></div></div>
 
-  return (
-    <div className="app">
-      <header className="top">
-        <div className="brand">
-          ServeFlow <span>AI</span>
-        </div>
-
-        <nav className="nav">
-          {nav.map((item) => (
-            <button
-              key={item}
-              className={view === item ? 'active' : ''}
-              onClick={() => go(item)}
-            >
-              {item === 'customer'
-                ? '📱 Customer QR'
-                : item === 'owner'
-                  ? '👑 Owner'
-                  : item === 'manager'
-                    ? '👨‍💼 Manager'
-                    : item === 'waiter'
-                      ? '🧑‍🍽️ Waiter'
-                      : '👨‍🍳 Kitchen'}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      <main className="main">{content()}</main>
-
-      {selected && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setSelected(null)}
-        >
-          <div
-            className="card modal"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2>Table {selected.id}</h2>
-            <p>
-              Status: <b>{selected.status}</b>
-            </p>
-            <p>
-              Assigned waiter: <b>{selected.waiter}</b>
-            </p>
-            <p className="muted">
-              Customer count, order timeline, requests and billing details
-              will appear here when the Supabase backend is connected.
-            </p>
-
-            <button
-              className="button"
-              onClick={() => setSelected(null)}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+        {active === 'overview' && <Overview orders={orders} tables={tables} onNavigate={setActive} onAdd={addOrder} />}
+        {active === 'orders' && <div className="panel"><SectionHead title="Order management" sub="Track every dine-in, takeaway and delivery order in one place." action={<button className="btn btn-primary" onClick={() => setModal('order')}>＋ New order</button>} /><div className="toolbar"><div className="search"><span>⌕</span><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search order, customer or table..." /></div><div className="filter-row">{['All', 'New', 'Preparing', 'Ready', 'Served'].map(f => <button key={f} className={'filter-btn ' + (filter === f ? 'active' : '')} onClick={() => setFilter(f)}>{f}</button>)}</div></div><div className="table-wrap"><table><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>ITEMS</th><th>TYPE / TABLE</th><th>TOTAL</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{filteredOrders.map(o => <tr key={o.id}><td><b>{o.id}</b><small>{o.time}</small></td><td>{o.customer}</td><td className="item-cell">{o.items}</td><td>{o.type}<small>{o.table}</small></td><td><b>{money(o.total)}</b></td><td><Pill tone={o.status.toLowerCase()}>{o.status}</Pill></td><td><select className="action-select" value={o.status} onChange={e => updateOrder(o.id, e.target.value as Order['status'])}><option>New</option><option>Preparing</option><option>Ready</option><option>Served</option></select></td></tr>)}</tbody></table>{filteredOrders.length === 0 && <div className="empty">No matching orders found.</div>}</div></div>}
+        {active === 'tables' && <div className="panel"><SectionHead title="Restaurant floor" sub="A live view of seating, occupancy and table turnover." action={<button className="btn btn-quiet" onClick={() => notify('Floor layout refreshed.')}>↻ Refresh floor</button>} /><div className="legend"><span><i className="dot available"></i> Available</span><span><i className="dot occupied"></i> Occupied</span><span><i className="dot reserved"></i> Reserved</span><span><i className="dot cleaning"></i> Cleaning</span></div><div className="floor-grid">{tables.map(t => <button key={t.id} className={'floor-table ' + t.status.toLowerCase()} onClick={() => { setTables(prev => prev.map(x => x.id === t.id ? {...x, status: x.status === 'Available' ? 'Occupied' : x.status === 'Occupied' ? 'Cleaning' : 'Available'} : x)); notify(t.id + ' status updated'); }}><span>♧</span><b>{t.id}</b><small>{t.seats} seats · {t.area}</small><Pill tone={t.status.toLowerCase()}>{t.status}</Pill></button>)}</div><p className="hint">Demo interaction: select a table to cycle its status between available, occupied and cleaning.</p></div>}
+        {active === 'kitchen' && <Kitchen orders={orders} onUpdate={updateOrder} />}
+        {active === 'reservations' && <div className="panel"><SectionHead title="Reservations & bookings" sub="Manage guest bookings, seating requests and upcoming arrivals." action={<button className="btn btn-primary" onClick={() => setModal('reservation')}>＋ Add booking</button>} /><div className="mini-stats"><div><small>Today's bookings</small><b>{reservations.length + 18}</b></div><div><small>Guests expected</small><b>{reservations.reduce((a,r)=>a+r.guests,0)+42}</b></div><div><small>Available tables</small><b>{tables.filter(t=>t.status==='Available').length}</b></div></div><div className="table-wrap"><table><thead><tr><th>GUEST</th><th>TIME</th><th>PARTY SIZE</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>{reservations.map((r,i)=><tr key={r.name+i}><td><b>{r.name}</b><small>Reservation #{208+i}</small></td><td>{r.time}</td><td>{r.guests} guests</td><td><Pill tone={r.status.toLowerCase()}>{r.status}</Pill></td><td><button className="text-action" onClick={()=>{setReservations(prev=>prev.map(x=>x.name===r.name?{...x,status:'Seated'}:x));notify(r.name+' checked in');}}>Check in →</button></td></tr>)}</tbody></table></div></div>}
+        {active === 'menu' && <div className="panel"><SectionHead title="Menu & catalog" sub="Manage food, beverages, categories, pricing and availability." action={<button className="btn btn-primary" onClick={()=>setModal('menu')}>＋ Add item</button>} /><div className="menu-grid">{menu.map((m,i)=><div className="menu-card" key={m.name}><div className="menu-art">{['🥞','🍕','🍕','🥪','🍔','☕','🧋','🍵','🍰'][i]}</div><div className="menu-info"><Pill>{m.category}</Pill><b>{m.name}</b><strong>{money(m.price)}</strong><small>{m.available?'Available':'Out of stock'}</small></div><button className={'toggle ' +(m.available?'on':'')} onClick={()=>setMenu(prev=>prev.map(x=>x.name===m.name?{...x,available:!x.available}:x))}><span/></button></div>)}</div></div>}
+        {active === 'inventory' && <Inventory notify={notify} />}
+        {active === 'customers' && <Customers notify={notify} />}
+        {active === 'staff' && <Staff notify={notify} />}
+        {active === 'delivery' && <Delivery notify={notify} />}
+        {active === 'analytics' && <Analytics orders={orders} />}
+        {active === 'marketing' && <Marketing notify={notify} />}
+        {active === 'settings' && <div className="settings-layout"><div className="panel"><SectionHead title="Workspace settings" sub="Configure your restaurant workspace and demo preferences."/><label className="field-label">Business name</label><input className="form-input" value={restaurant} onChange={e=>setRestaurant(e.target.value)} /><label className="field-label">Workspace mode</label><div className="setting-row"><div><b>Demo mode</b><p>Use sample data and safe local interactions. No live customer data or payments.</p></div><button className={'toggle '+(demo?'on':'')} onClick={()=>{setDemo(!demo);notify('Demo mode preference updated.')}}><span/></button></div><div className="setting-row"><div><b>Notifications</b><p>Order alerts, reservation reminders and operational updates.</p></div><Pill tone="positive">Enabled</Pill></div><div className="setting-row"><div><b>Integrations</b><p>POS, payment gateway, WhatsApp, delivery partners and Supabase.</p></div><button className="btn btn-quiet" onClick={()=>notify('Integrations are ready for configuration.')}>Configure →</button></div></div><div className="panel"><h3>Modules included</h3>{['Point of sale & billing','QR ordering & digital menu','Kitchen display system','Inventory & purchase tracking','Reservations & table management','Customer CRM & loyalty','Staff & shift management','Delivery & takeaway','Marketing automation','Reports & analytics'].map(x=><div className="check-row" key={x}><span>✓</span>{x}</div>)}</div></div>}
+      </div>
+      <footer className="footer"><span>© 2026 ServeFlow AI</span><span>Hospitality operations, beautifully connected.</span><span><i className="dot available"></i> All systems operational</span></footer>
+    </main>
+    {toast && <div className="toast">✓ &nbsp;{toast}</div>}
+    {modal && <div className="modal-backdrop" onClick={()=>setModal('')}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><small>DEMO WORKSPACE</small><h2>{modal==='menu'?'Add menu item':modal==='reservation'?'New reservation':'Create order'}</h2></div><button className="close" onClick={()=>setModal('')}>×</button></div>{modal==='menu'?<><label className="field-label">Item name</label><input className="form-input" value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} placeholder="e.g. Cappuccino"/><label className="field-label">Category</label><select className="form-input" value={newItem.category} onChange={e=>setNewItem({...newItem,category:e.target.value})}><option>Snacks</option><option>Pizza</option><option>Breakfast</option><option>Coffee & Drinks</option><option>Desserts</option></select><label className="field-label">Price (₹)</label><input className="form-input" type="number" value={newItem.price} onChange={e=>setNewItem({...newItem,price:e.target.value})}/><button className="btn btn-primary full" onClick={()=>{if(!newItem.name.trim())return notify('Enter an item name first.');setMenu(p=>[...p,{name:newItem.name,category:newItem.category,price:Number(newItem.price)||0,available:true}]);setNewItem({name:'',category:'Snacks',price:'180'});setModal('');notify('Menu item added');}}>Save menu item</button></>:modal==='reservation'?<><label className="field-label">Guest name</label><input className="form-input" value={newReservation.name} onChange={e=>setNewReservation({...newReservation,name:e.target.value})} placeholder="Guest full name"/><label className="field-label">Time</label><input className="form-input" value={newReservation.time} onChange={e=>setNewReservation({...newReservation,time:e.target.value})}/><label className="field-label">Number of guests</label><input className="form-input" type="number" min="1" value={newReservation.guests} onChange={e=>setNewReservation({...newReservation,guests:e.target.value})}/><button className="btn btn-primary full" onClick={()=>{if(!newReservation.name.trim())return notify('Enter the guest name first.');setReservations(p=>[...p,{...newReservation,guests:Number(newReservation.guests)||1,status:'Confirmed'}]);setModal('');notify('Reservation created');}}>Confirm reservation</button></>:<><div className="order-preview"><span>Sample dine-in order</span><b>Classic Masala Dosa + Masala Chai</b><strong>₹200</strong><small>Table T01 · Walk-in guest · Demo data</small></div><button className="btn btn-primary full" onClick={addOrder}>Create demo order</button></>}</div></div>}
+  </div>;
 }
 
-function Owner({
-  onTable,
-}: {
-  onTable: (table: Table) => void;
-}) {
-  const stats = [
-    ['🟢 Available Tables', '8'],
-    ['🔴 Occupied Tables', '12'],
-    ['🍳 Preparing Orders', '9'],
-    ['⚠️ Attention Required', '3'],
-    ['💰 Today Revenue', '₹24,500'],
-    ['📦 Total Orders', '87'],
-  ];
+const pageDescriptions: Record<string,string> = { orders:'One clear view of every order, from the first ticket to fulfilment.', tables:'Keep seating, table status and guest flow under control.', kitchen:'Give your kitchen team a focused, real-time order queue.', reservations:'Turn incoming bookings into smooth guest arrivals.', menu:'Keep your food and beverage catalog accurate and up to date.', inventory:'Track stock levels, suppliers and ingredient movement.', customers:'Build stronger guest relationships and reward repeat visits.', staff:'Coordinate your team, roles and shift coverage.', delivery:'Manage online, takeaway and delivery fulfilment.', analytics:'Understand sales, service performance and business trends.', marketing:'Bring guests back with thoughtful campaigns and offers.', settings:'Make ServeFlow AI work the way your business operates.' };
 
-  return (
-    <>
-      <div className="hero">
-        <h1>Good morning, Owner 👋</h1>
-        <p className="muted">
-          Spice Garden • Live restaurant command center
-        </p>
-      </div>
-
-      <div className="grid">
-        {stats.map(([title, value]) => (
-          <div className="card" key={title}>
-            <div className="muted">{title}</div>
-            <div className="value">{value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="two">
-        <section className="card">
-          <h2>🪑 Live Restaurant Floor</h2>
-
-          <div className="tables">
-            {tables.map((table) => (
-              <button
-                className={`table ${table.cls}`}
-                key={table.id}
-                onClick={() => onTable(table)}
-              >
-                <b>T{String(table.id).padStart(2, '0')}</b>
-
-                <div className="small">{table.status}</div>
-
-                <div className="small muted">
-                  {table.waiter}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>🚨 Attention Required</h2>
-
-          <div className="list">
-            <div className="alert">
-              ⚠️ Table 5 — Order delayed 24 minutes
-            </div>
-
-            <div className="alert">
-              🔔 Table 8 — Customer needs waiter
-            </div>
-
-            <div className="alert">
-              🍔 Table 3 — Food ready for 6 minutes
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <section className="card section">
-        <h2>✨ ServeFlow AI Insights</h2>
-
-        <div className="list">
-          <div className="row">
-            <span>Rahul is overloaded with 6 tables.</span>
-            <b>Assign next table → Priya</b>
-          </div>
-
-          <div className="row">
-            <span>Pizza preparation is slower than usual.</span>
-            <b>+8 min today</b>
-          </div>
-
-          <div className="row">
-            <span>Peak period predicted.</span>
-            <b>7 PM – 9 PM</b>
-          </div>
-        </div>
-      </section>
-    </>
-  );
+function Overview({orders,tables,onNavigate,onAdd}:{orders:Order[];tables:TableItem[];onNavigate:(s:string)=>void;onAdd:()=>void}) {
+ const newCount=orders.filter(o=>o.status==='New').length;
+ return <><div className="stats-grid"><Stat label="Today's revenue" value="₹48,290" change="↗ 12.8% vs yesterday" icon="₹"/><Stat label="Total orders" value="186" change="↗ 8.2% vs yesterday" icon="▤"/><Stat label="Average order value" value="₹259" change="↗ 4.6% this week" icon="◈"/><Stat label="Table occupancy" value="68%" change="Across 12 active tables" icon="▦"/></div><div className="overview-grid"><div className="panel"><div className="section-head"><div><h2>Revenue overview</h2><p>Sales performance throughout the day</p></div><select className="period-select"><option>Today</option><option>This week</option><option>This month</option></select></div><div className="revenue-total"><b>₹48,290</b><Pill tone="positive">↗ 12.8%</Pill></div><div className="chart"><div className="chart-y"><span>₹15k</span><span>₹10k</span><span>₹5k</span><span>₹0</span></div><div className="chart-main"><div className="grid-lines"><i/><i/><i/><i/></div><div className="bars">{[24,38,30,54,44,68,52,82,62,92,74,100].map((v,i)=><div className="bar-col" key={i}><div className="bar" style={{height:v+'%'}}/><small>{['9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p'][i]}</small></div>)}</div></div></div></div><div className="panel"><SectionHead title="Live operations" sub="A quick look at your floor."/><div className="ops-list"><div><span className="ops-icon orange">♨</span><span><b>{orders.filter(o=>o.status==='Preparing').length+6} orders</b><small>Being prepared</small></span><button onClick={()=>onNavigate('kitchen')}>View →</button></div><div><span className="ops-icon green-bg">▦</span><span><b>{tables.filter(t=>t.status==='Available').length} tables</b><small>Ready for guests</small></span><button onClick={()=>onNavigate('tables')}>View →</button></div><div><span className="ops-icon blue-bg">▣</span><span><b>3 bookings</b><small>Arriving this hour</small></span><button onClick={()=>onNavigate('reservations')}>View →</button></div><div><span className="ops-icon red-bg">♧</span><span><b>{newCount+2} alerts</b><small>Need your attention</small></span><button onClick={()=>onNavigate('orders')}>Review →</button></div></div></div></div><div className="lower-grid"><div className="panel"><SectionHead title="Recent orders" sub="Latest activity from your restaurant." action={<button className="text-action" onClick={()=>onNavigate('orders')}>View all →</button>}/><div className="recent-list">{orders.slice(0,4).map(o=><div className="recent-row" key={o.id}><div className="order-symbol">▤</div><div className="recent-info"><b>{o.id} <span>· {o.customer}</span></b><small>{o.items}</small></div><div className="recent-end"><b>{money(o.total)}</b><Pill tone={o.status.toLowerCase()}>{o.status}</Pill></div></div>)}</div></div><div className="panel"><SectionHead title="ServeFlow AI insights" sub="Helpful signals from your demo data."/><div className="insight"><div className="insight-symbol">✦</div><div><b>Peak hour approaching</b><p>Guest activity typically rises between 7–9 PM. Prepare your front-of-house team.</p></div></div><div className="insight"><div className="insight-symbol">↗</div><div><b>Popular menu pick</b><p>Cold Coffee is trending. Consider featuring it in your next cafe combo.</p></div></div><button className="btn btn-quiet full" onClick={()=>onNavigate('analytics')}>Explore business insights →</button></div></div><div className="quick-actions"><button onClick={onAdd}>＋ Create new order</button><button onClick={()=>onNavigate('menu')}>☷ Update menu</button><button onClick={()=>onNavigate('reservations')}>▣ Add reservation</button><button onClick={()=>onNavigate('inventory')}>▧ Check inventory</button></div></>;
 }
 
-function Manager() {
-  const stats = [
-    ['🪑 Live Tables', '24'],
-    ['📦 Active Orders', '11'],
-    ['🔔 Customer Requests', '3'],
-    ['⚠️ Delays', '2'],
-  ];
-
-  return (
-    <>
-      <div className="hero">
-        <h1>Manager Dashboard 👨‍💼</h1>
-        <p className="muted">
-          Control daily restaurant operations.
-        </p>
-      </div>
-
-      <div className="grid">
-        {stats.map(([title, value]) => (
-          <div className="card" key={title}>
-            <div>{title}</div>
-            <div className="value">{value}</div>
-          </div>
-        ))}
-      </div>
-
-      <section className="card section">
-        <h2>Today's Operations</h2>
-
-        <div className="list">
-          <div className="row">
-            <span>Assign waiter to Table 8</span>
-            <button className="button">Assign</button>
-          </div>
-
-          <div className="row">
-            <span>Order #1025 delayed</span>
-            <button className="button danger">Escalate</button>
-          </div>
-        </div>
-      </section>
-    </>
-  );
+function Kitchen({orders,onUpdate}:{orders:Order[];onUpdate:(id:string,s:Order['status'])=>void}) {
+ const queue=orders.filter(o=>o.status!=='Served');
+ return <div className="panel"><SectionHead title="Kitchen display system" sub="Prioritise incoming tickets and keep every station in sync." action={<Pill tone="positive">● Kitchen online</Pill>}/><div className="kitchen-columns">{(['New','Preparing','Ready'] as const).map(status=><div className="kitchen-col" key={status}><div className="kitchen-col-head"><b>{status}</b><Pill>{queue.filter(o=>o.status===status).length}</Pill></div>{queue.filter(o=>o.status===status).map(o=><div className="ticket" key={o.id}><div className="ticket-head"><b>{o.id}</b><small>{o.time}</small></div><h3>{o.table} · {o.type}</h3><p>{o.items}</p><div className="ticket-foot"><span>{o.customer}</span>{status==='New'?<button onClick={()=>onUpdate(o.id,'Preparing')}>Start preparing →</button>:status==='Preparing'?<button onClick={()=>onUpdate(o.id,'Ready')}>Mark ready ✓</button>:<button onClick={()=>onUpdate(o.id,'Served')}>Complete order ✓</button>}</div></div>)}</div>)}</div></div>;
 }
 
-function Waiter() {
-  const [completed, setCompleted] = useState<string[]>([]);
-
-  const requests = [
-    ['Table 2', '🍳 Food Preparing'],
-    ['Table 5', '💧 Water Requested'],
-    ['Table 9', '💳 Bill Requested'],
-    ['Table 4', '🔔 Food Ready'],
-  ];
-
-  const complete = (table: string) => {
-    setCompleted([...completed, table]);
-  };
-
-  return (
-    <>
-      <div className="hero">
-        <h1>Rahul&apos;s Dashboard 🧑‍🍽️</h1>
-        <p className="muted">
-          Your active tables and customer requests.
-        </p>
-      </div>
-
-      <div className="list">
-        {requests.map(([table, status]) => (
-          <div className="row" key={table}>
-            <div>
-              <b>{table}</b>
-
-              <div className="small muted">
-                {status}
-              </div>
-            </div>
-
-            {completed.includes(table) ? (
-              <button className="button success">
-                Completed ✓
-              </button>
-            ) : (
-              <button
-                className="button"
-                onClick={() => complete(table)}
-              >
-                Complete
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
-function Kitchen() {
-  const [ready, setReady] = useState<string[]>([]);
-
-  const orders = [
-    ['#1025', 'Table 05', 'Pizza + Pasta', '18 min'],
-    ['#1026', 'Table 03', 'Paneer Tikka', '9 min'],
-    ['#1027', 'Table 09', 'Burger + Fries', '4 min'],
-  ];
-
-  const markReady = (orderId: string) => {
-    if (!ready.includes(orderId)) {
-      setReady([...ready, orderId]);
-    }
-  };
-
-  return (
-    <>
-      <div className="hero">
-        <h1>Kitchen Display 👨‍🍳</h1>
-        <p className="muted">
-          Live order queue
-        </p>
-      </div>
-
-      <div className="grid">
-        {orders.map((order) => {
-          const isReady = ready.includes(order[0]);
-
-          return (
-            <div className="card" key={order[0]}>
-              <b>
-                {order[0]} • {order[1]}
-              </b>
-
-              <p>{order[2]}</p>
-
-              <p className="muted">
-                Waiting: {order[3]}
-              </p>
-
-              <button
-                className={`button ${
-                  isReady ? 'success' : 'warning'
-                }`}
-                onClick={() => markReady(order[0])}
-              >
-                {isReady ? 'Ready ✓' : 'Mark Ready'}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-function Customer({
-  message,
-  setMessage,
-  request,
-  setRequest,
-}: {
-  message: string;
-  setMessage: (value: string) => void;
-  request: string;
-  setRequest: (value: string) => void;
-}) {
-  const [cart, setCart] = useState<string[]>([]);
-
-  const askAI = () => {
-    const question = request.toLowerCase();
-
-    if (question.includes('spicy')) {
-      setMessage(
-        '🌶️ Try Paneer Tikka Masala — spicy, popular and rated 4.9 ⭐'
-      );
-    } else if (question.includes('veg')) {
-      setMessage(
-        '🥇 Best vegetarian choice: Paneer Tikka Masala. ⭐ 4.9 • 🔥 Best Seller'
-      );
-    } else if (question.includes('best')) {
-      setMessage(
-        '🥇 Our top pick: Paneer Tikka Masala. 🥈 Special Pizza. 🥉 Cold Coffee.'
-      );
-    } else if (question.includes('budget')) {
-      setMessage(
-        '💰 Best budget choice: Cold Coffee + Garlic Bread for an affordable meal.'
-      );
-    } else {
-      setMessage(
-        '✨ I recommend Paneer Tikka Masala or our Special Cheese Pizza based on popularity and ratings.'
-      );
-    }
-  };
-
-  const sendRequest = (type: string) => {
-    alert(`${type} request sent successfully! (Demo mode)`);
-  };
-
-  const addToCart = (item: string) => {
-    setCart([...cart, item]);
-  };
-
-  const menu = [
-    ['Paneer Tikka Masala', '₹280'],
-    ['Special Cheese Pizza', '₹350'],
-    ['Cold Coffee', '₹160'],
-  ];
-
-  return (
-    <div className="phone">
-      <div className="hero">
-        <h1>Spice Garden ✨</h1>
-        <p className="muted">
-          🪑 Table 05 • Welcome!
-        </p>
-      </div>
-
-      <div className="grid">
-        <button
-          className="card action-card"
-          onClick={() => alert('Menu is below 👇')}
-        >
-          <div className="value">📖</div>
-          <b>View Menu</b>
-        </button>
-
-        <button
-          className="card action-card"
-          onClick={() => sendRequest('Call Waiter')}
-        >
-          <div className="value">🛎️</div>
-          <b>Call Waiter</b>
-        </button>
-
-        <button
-          className="card action-card"
-          onClick={() => sendRequest('Water')}
-        >
-          <div className="value">💧</div>
-          <b>Request Water</b>
-        </button>
-
-        <button
-          className="card action-card"
-          onClick={() => sendRequest('Bill')}
-        >
-          <div className="value">💳</div>
-          <b>Request Bill</b>
-        </button>
-      </div>
-
-      <section className="card section">
-        <h2>✨ Ask ServeFlow AI</h2>
-
-        <div className="chat">{message}</div>
-
-        <input
-          className="input"
-          value={request}
-          onChange={(event) =>
-            setRequest(event.target.value)
-          }
-          placeholder="What is the best food here?"
-        />
-
-        <button
-          className="button primary"
-          style={{ marginTop: 10 }}
-          onClick={askAI}
-        >
-          Ask AI
-        </button>
-      </section>
-
-      <section className="card section">
-        <h2>🍽️ Popular Menu</h2>
-
-        {menu.map(([name, price]) => (
-          <div className="menuitem" key={name}>
-            <span>
-              <b>{name}</b>
-
-              <div className="small muted">
-                ⭐ Popular choice
-              </div>
-            </span>
-
-            <button
-              className="button"
-              onClick={() => addToCart(name)}
-            >
-              Add {price}
-            </button>
-          </div>
-        ))}
-
-        {cart.length > 0 && (
-          <div className="chat">
-            🛒 Cart: {cart.join(', ')}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
+function Inventory({notify}:{notify:(s:string)=>void}) { const rows=[['Arabica coffee beans','Beverages','2.4 kg','10 kg','Low'],['Mozzarella cheese','Dairy','4.8 kg','3 kg','Healthy'],['Pizza flour','Dry goods','8 kg','5 kg','Healthy'],['Fresh tomatoes','Produce','1.2 kg','4 kg','Low'],['Paneer','Dairy','3.5 kg','2 kg','Healthy'],['Cold drink cups','Packaging','120 pcs','100 pcs','Healthy']]; return <div className="panel"><SectionHead title="Inventory & stock" sub="Monitor ingredients, reduce waste and stay ready for service." action={<button className="btn btn-primary" onClick={()=>notify('Stock intake form opened in demo mode.')}>＋ Record stock</button>}/><div className="mini-stats"><div><small>Tracked ingredients</small><b>126</b></div><div><small>Low stock alerts</small><b className="warning-text">08</b></div><div><small>Estimated stock value</small><b>₹86,420</b></div></div><div className="table-wrap"><table><thead><tr><th>INGREDIENT</th><th>CATEGORY</th><th>IN STOCK</th><th>REORDER LEVEL</th><th>STATUS</th><th/></tr></thead><tbody>{rows.map(r=><tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td><Pill tone={r[4]==='Low'?'new':'positive'}>{r[4]}</Pill></td><td><button className="text-action" onClick={()=>notify('Purchase request created for '+r[0])}>Restock →</button></td></tr>)}</tbody></table></div></div>; }
+function Customers({notify}:{notify:(s:string)=>void}) { return <div className="panel"><SectionHead title="Guest relationships" sub="Understand guest preferences and encourage repeat visits." action={<button className="btn btn-primary" onClick={()=>notify('Customer profile form opened.')}>＋ Add customer</button>}/><div className="mini-stats"><div><small>Total guests</small><b>2,840</b></div><div><small>Returning guests</small><b>64%</b></div><div><small>Loyalty points issued</small><b>18,420</b></div></div><div className="table-wrap"><table><thead><tr><th>GUEST</th><th>VISITS</th><th>TOTAL SPEND</th><th>LAST VISIT</th><th>SEGMENT</th><th/></tr></thead><tbody>{[['Aarav Shah','12','₹8,450','Today','VIP'],['Mira Patel','8','₹5,280','Yesterday','Regular'],['Dev Mehta','3','₹1,420','2 days ago','New'],['Riya Joshi','16','₹12,600','Today','VIP']].map(r=><tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td><Pill tone={r[4]==='VIP'?'positive':'neutral'}>{r[4]}</Pill></td><td><button className="text-action" onClick={()=>notify('Guest profile opened for '+r[0])}>Profile →</button></td></tr>)}</tbody></table></div></div>; }
+function Staff({notify}:{notify:(s:string)=>void}) { return <div className="panel"><SectionHead title="Team & shifts" sub="Keep service covered with clear roles and shift visibility." action={<button className="btn btn-primary" onClick={()=>notify('Invite team member form opened.')}>＋ Invite team</button>}/><div className="staff-grid">{[['RS','Rahul Sharma','Floor manager','On shift'],['AP','Amit Patel','Waiter','On shift'],['PD','Priya Desai','Waiter','On shift'],['NK','Neel Kumar','Head chef','On shift'],['KM','Kavya Mehta','Barista','Upcoming']].map(x=><div className="staff-card" key={x[1]}><div className="staff-avatar">{x[0]}</div><b>{x[1]}</b><small>{x[2]}</small><Pill tone={x[3]==='On shift'?'positive':'neutral'}>{x[3]}</Pill><button className="text-action" onClick={()=>notify('Shift details for '+x[1])}>View schedule →</button></div>)}</div></div>; }
+function Delivery({notify}:{notify:(s:string)=>void}) { return <div className="panel"><SectionHead title="Off-premise orders" sub="Coordinate delivery partners, takeaway pickups and order handoff." action={<button className="btn btn-primary" onClick={()=>notify('Pickup order created in demo mode.')}>＋ New pickup</button>}/><div className="mini-stats"><div><small>Active deliveries</small><b>06</b></div><div><small>Ready for pickup</small><b>03</b></div><div><small>Average prep time</small><b>18 min</b></div></div><div className="delivery-list">{[['SF-1045','Riya Joshi','Delivery partner · Assigned','Out for delivery','21 min'],['SF-1043','Kunal Shah','Takeaway · Counter 2','Ready for pickup','16 min'],['SF-1041','Nisha Patel','Delivery partner · Finding rider','Preparing','9 min']].map(r=><div className="delivery-row" key={r[0]}><div className="order-symbol">⌁</div><div><b>{r[0]} · {r[1]}</b><small>{r[2]}</small></div><Pill tone={r[3]==='Ready for pickup'?'positive':'preparing'}>{r[3]}</Pill><span>{r[4]}</span><button className="text-action" onClick={()=>notify('Tracking details opened for '+r[0])}>Track →</button></div>)}</div><p className="hint">Delivery partner integrations can be connected during production setup.</p></div>; }
+function Analytics({orders}:{orders:Order[]}) { const total=orders.reduce((a,o)=>a+o.total,0); return <div className="stats-grid"><Stat label="Demo order revenue" value={money(total)} change="From visible sample orders" icon="₹"/><Stat label="Orders in workspace" value={String(orders.length)} change="Sample operational data" icon="▤"/><Stat label="Average ticket" value={money(orders.length?Math.round(total/orders.length):0)} change="Based on visible orders" icon="◈"/><Stat label="Fulfilment rate" value="94.2%" change="Demo performance metric" icon="✓"/><div className="panel wide-panel"><SectionHead title="Sales performance" sub="Illustrative daily revenue distribution."/><div className="chart large-chart"><div className="chart-y"><span>₹15k</span><span>₹10k</span><span>₹5k</span><span>₹0</span></div><div className="chart-main"><div className="grid-lines"><i/><i/><i/><i/></div><div className="bars">{[30,40,35,60,50,72,58,80,64,96,76,88].map((v,i)=><div className="bar-col" key={i}><div className="bar" style={{height:v+'%'}}/><small>{['9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p'][i]}</small></div>)}</div></div></div></div><div className="panel"><SectionHead title="Popular categories"/>{[['Coffee & Drinks','32%'],['Main course','28%'],['Pizza','22%'],['Snacks & desserts','18%']].map(x=><div className="progress-row" key={x[0]}><div><span>{x[0]}</span><b>{x[1]}</b></div><div className="progress"><i style={{width:x[1]}}/></div></div>)}</div></div>; }
+function Marketing({notify}:{notify:(s:string)=>void}) { return <div className="panel"><SectionHead title="Guest engagement" sub="Create campaigns that bring guests back and grow your brand." action={<button className="btn btn-primary" onClick={()=>notify('Campaign builder opened in demo mode.')}>＋ Create campaign</button>}/><div className="campaign-grid">{[['☕','Cafe happy hour','Offer a weekday coffee combo between 3–5 PM.','Draft'],['✦','Welcome back','Invite guests who have not visited recently.','Ready'],['🎉','Birthday rewards','Celebrate guest birthdays with a special treat.','Active']].map(x=><div className="campaign-card" key={x[1]}><div className="campaign-icon">{x[0]}</div><Pill tone={x[3]==='Active'?'positive':'neutral'}>{x[3]}</Pill><h3>{x[1]}</h3><p>{x[2]}</p><button className="text-action" onClick={()=>notify(x[1]+' campaign opened')}>Manage campaign →</button></div>)}</div><div className="integration-note"><span>✧</span><div><b>Connect your guest channels</b><p>WhatsApp, email, QR loyalty and social campaigns can be connected when you configure production integrations.</p></div></div></div>; }
